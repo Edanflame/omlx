@@ -32,7 +32,7 @@ jobs:
           # 1. 告诉 Homebrew 我们要为哪个脚本打包
           # --root-url 会告诉它未来二进制包存放在哪里
           # 这里的 URL 格式必须是 https://ghcr.io/v2/你的用户名/omlx
-          brew test-bot --root-url=https://ghcr.io/v2/${{ github.repository_owner }}/omlx --formula Formula/omlx.rb
+          brew test-bot --root-url=https://ghcr.io/v2/${{ github.repository_owner }}/omlx Formula/omlx.rb
 
       - name: Upload Bottles to GitHub Packages (GHCR)
         env:
