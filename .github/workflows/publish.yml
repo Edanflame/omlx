@@ -1,0 +1,63 @@
+name: Build and Publish Bottles
+on:
+  workflow_dispatch: # 允许你手动点击按钮触发
+  push:
+    branches:
+      - main
+    paths:
+      - 'Formula/omlx.rb' # 只有当你修改了脚本时才触发
+
+jobs:
+  build-bottles:
+    strategy:
+      matrix:
+        # 针对 Apple Silicon 芯片 (M1/M2/M3/M4)
+        # macos-14 是目前最稳的 arm64 编译环境
+        os: [macos-14, macos-15, macos-16] 
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Build Bottles
+        run: |
+          # 1. 告诉 Homebrew 我们要为哪个脚本打包
+          # --root-url 会告诉它未来二进制包存放在哪里
+          # 这里的 URL 格式必须是 https://ghcr.io/v2/你的用户名/omlx
+          brew test-bot --root-url=https://ghcr.io/v2/${{ github.repository_owner }}/omlx --formula Formula/omlx.rb
+
+      - name: Upload Bottles to GitHub Packages (GHCR)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 登录 GitHub 镜像仓库
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+          # 将生成的 .tar.gz 二进制包上传
+          # Homebrew 现在支持像推送 Docker 镜像一样推送二进制包
+          for bottle in *.bottle.tar.gz; do
+            # 这里的命令会将 bottle 关联到你的仓库
+            brew pr-upload --debug --root-url=https://ghcr.io/v2/${{ github.repository_owner }}/omlx "$bottle"
+          done
+
+      - name: Update Formula with Bottle Info
+        run: |
+          # 自动生成 bottle do ... end 代码块并写入 Formula/omlx.rb
+          # 这样用户执行 brew update 后就能看到最新的二进制包信息
+          brew bottle --merge --write Formula/omlx.rb
+
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/omlx.rb
+          git commit -m "chore: update omlx bottle info" || echo "No changes to commit"
+          git push
